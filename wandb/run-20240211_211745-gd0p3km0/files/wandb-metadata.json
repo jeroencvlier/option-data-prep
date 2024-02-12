@@ -1,0 +1,45 @@
+{
+    "os": "macOS-14.3.1-x86_64-i386-64bit",
+    "python": "3.11.7",
+    "heartbeatAt": "2024-02-11T19:17:46.216123",
+    "startedAt": "2024-02-11T19:17:45.318855",
+    "docker": null,
+    "cuda": null,
+    "args": [],
+    "state": "running",
+    "program": "/Users/jeroenvanlier/Documents/Github/option_extraction/src/data/data_interpolation.py",
+    "codePathLocal": "src/data/data_interpolation.py",
+    "codePath": "src/data/data_interpolation.py",
+    "git": {
+        "remote": "https://github.com/jeroencvlier/option_extraction.git",
+        "commit": "1fb96ef2dff93c6db42ad3872f50bb66e58801dd"
+    },
+    "email": "jeroencvlier@gmail.com",
+    "root": "/Users/jeroenvanlier/Documents/Github/option_extraction",
+    "host": "Jeroen-MBP-M3.home",
+    "username": "jeroenvanlier",
+    "executable": "/Users/jeroenvanlier/Documents/Github/option_extraction/.venv/bin/python",
+    "cpu_count": 11,
+    "cpu_count_logical": 11,
+    "cpu_freq": {
+        "current": 2400,
+        "min": 2400,
+        "max": 2400
+    },
+    "cpu_freq_per_core": [
+        {
+            "current": 2400,
+            "min": 2400,
+            "max": 2400
+        }
+    ],
+    "disk": {
+        "/": {
+            "total": 460.4317207336426,
+            "used": 9.438663482666016
+        }
+    },
+    "memory": {
+        "total": 18.0
+    }
+}
