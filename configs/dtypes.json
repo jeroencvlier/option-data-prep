@@ -3,7 +3,6 @@
         "strikePrice": "float",
         "daysToExpiration": "int",
         "expirationDate": "int64",
-        "symbol": "string",
         "bid": "float",
         "ask": "float",
         "last": "float",
@@ -23,13 +22,7 @@
         "theta": "float",
         "vega": "float",
         "rho": "float",
-        "openInterest": "int64",
-        "timeValue": "float",
-        "theoreticalOptionValue": "float",
-        "percentChange": "float",
-        "markChange": "float",
-        "markPercentChange": "float",
-        "inTheMoney": "boolean"
+        "openInterest": "int64"
     },
     "columns_dropped": {
         "putCall": "category",
@@ -50,7 +43,14 @@
         "pennyPilot": "boolean",
         "theoreticalVolatility": "float",
         "tradeDate": "int64",
-        "intrinsicValue": "float"
+        "intrinsicValue": "float",
+        "symbol": "string",
+        "theoreticalOptionValue": "float",
+        "percentChange": "float",
+        "markChange": "float",
+        "markPercentChange": "float",
+        "inTheMoney": "boolean",
+        "timeValue": "float"
     },
     "underlying_data_keep": {
         "quoteTime": "int64",

@@ -2,13 +2,14 @@
 __pycache__/
 *.py[cod]
 *$py.class
-
 # C extensions
 *.so
 
 # data files
 data/
 .DS_Store
+artifacts/
+wandb/
 
 # Distribution / packaging
 .Python
