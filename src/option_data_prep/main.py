@@ -1,22 +1,25 @@
+# Built in libraries
 import os
 import glob
 import logging
+import pickle
+from collections import OrderedDict
+import shutil
+import glob
+
+# 3rd party libraries
+from joblib import Parallel, delayed
+from tqdm import tqdm
 import pandas as pd
 import numpy as np
-import pickle
-from tqdm import tqdm
-from joblib import Parallel, delayed
 from sklearn.preprocessing import MinMaxScaler
-from src.option_extraction.utils import clean_dir, unzip_ujson, dtype_config
-from dotenv import load_dotenv, find_dotenv
-from src.option_extraction.data.data_pipeline_v2 import (
-    data_inference,
-    impute_peaks_rf,
-)
-import shutil
-import time
 import wandb
-import glob
+from dotenv import load_dotenv, find_dotenv
+
+# Custom libraries
+from src.option_data_prep.utils import clean_dir
+from option_data_prep.data.data_pipeline import data_inference, impute_peaks_rf
+
 
 pd.set_option("display.max_columns", None, "display.max_rows", 200)
 pd.set_option("future.no_silent_downcasting", True)
@@ -47,7 +50,7 @@ def save_to_wandb(folder):
 
     wandb.init(project="rlot-data-pipeline")
     artifact = wandb.Artifact("desc_stats_nounderlying", type="data")
-    artifact.add_dir(os.path.join(folder, "data", "train"),name="train")
+    artifact.add_dir(os.path.join(folder, "data", "train"),name="data")
     artifact.add_dir(os.path.join(folder, "model"), name="model")
     artifact.add_dir(os.path.join(folder, "src"), name="src")
     wandb.log_artifact(artifact)
@@ -68,28 +71,42 @@ def check_column_order(df):
 
 
 def data_scaler(df: pd.DataFrame, filename: str, train: bool = True):
-    underlying_price = df.pop("underlyingPrice").to_numpy()
+    df.sort_values(by=["humanTime"], inplace=True)
+    df.reset_index(drop=True, inplace=True)
+    
     human_time = df.pop("humanTime").to_numpy()
-    df = df.drop(columns=["tickerPrice"])
+    underlying_price = df.pop("underlyingPrice").to_numpy()
+    df = df.drop(columns=["tickerPrice", ])
+    # create a tuple of the column structure
+    scaled_columns = tuple(df.columns)
+    
     if train:
         df = fit_scaler(df)
     else:
         df = transform_scaler(df)
+        
+    # append the human time and underlying price
+    df.insert(0, "humanTime", human_time)
+    df.insert(0, "underlyingPrice", underlying_price)
 
-    data = []
-    for en, i in enumerate(df.index):
-        data.append(
-            {
-                "underlyingPrice": underlying_price[en],
-                "humanTime": human_time[en],
-                "data": df.iloc[en].to_numpy(),
-            }
-        )
+    data = OrderedDict()
+    for index, row in df.iterrows():
+        data[index] = {
+            "underlyingPrice": row["underlyingPrice"],
+            "humanTime": row["humanTime"],
+            "data": row.drop(labels=["underlyingPrice", "humanTime"]).to_numpy(),
+        }
 
     # save the data
     train_folder = os.path.join(folder, "data", "train", ticker)
     with open(os.path.join(train_folder, filename), "wb") as f:
         pickle.dump(data, f)
+    # save the column tuple structure to model folder
+    model_folder = os.path.join(folder, "model", ticker)
+    # with open(os.path.join(model_folder, "columns.pkl"), "wb") as f:
+    #     pickle.dump(scaled_columns, f)
+    pickle.dump(scaled_columns, open(model_folder, "wb"), protocol=5)
+    
 
 
 def fit_scaler(df):
@@ -110,9 +127,9 @@ def transform_scaler(df):
 
 
 def split_data(df):
-    test_df_front = df.iloc[:500]
-    test_df_back = df.iloc[-500:]
-    train_df = df.iloc[500:-500]
+    test_df_front = df.iloc[:500].copy()
+    test_df_back = df.iloc[-500:].copy()
+    train_df = df.iloc[500:-500].copy()
     return train_df, test_df_front, test_df_back
 
 
@@ -144,21 +161,28 @@ def pipeline(folder, ticker, file_paths, inference=False):
         )
 
     processed_files = glob.glob(os.path.join(data_infered_path, ticker, "*.parquet"))
+    processed_files = sorted(processed_files)
     df = pd.read_parquet(processed_files, engine="pyarrow")
-
+    # drop duplicated timestamps
+    # slice timestamps above 16h
+    df['hour'] = df['humanTime'].apply(lambda x: int(x.split(" ")[1].split(":")[0])) 
+    logging.info("Dropping %s duplicated timestamps, %s percentage of timestamps above 16h", len(df[df['hour']>16]), round(len(df[df['hour']>16])/len(df)*100,3))
+    df = df[df['hour']<=16]
+    df = df.drop(columns=['hour'])
+    
+    time_stamps = df["humanTime"]
+    logging.info(f"Number of unique timestamps: {len(time_stamps.unique())}")
+    logging.info(f"Number of duplicated timestamps: {len(time_stamps) - len(time_stamps.unique())}")    
     logging.info(f"Shape of the dataframe: {df.shape}")
-    if not inference:
-        df.sort_values(by=["humanTime"], inplace=True)
-        df.reset_index(drop=True, inplace=True)
-        # TODO: include the this in the inference
-        df = impute_peaks_rf(df)
-        check_column_order(df)
-
+    
     train_dir = os.path.join(folder, "data", "train")
     clean_dir(dir_to_clean=train_dir, ticker=ticker, wait_time=wait_time)
-    model_dir = os.path.join(folder, "model")
+    model_dir = os.path.join(folder, "model")    
     if not inference:
         clean_dir(dir_to_clean=model_dir, ticker=ticker, wait_time=wait_time)
+        # TODO: include the this in the inference
+        df = impute_peaks_rf(df)
+        check_column_order(df)        
         train_df, test_df_front, test_df_back = split_data(df)
         data_scaler(df=train_df, filename="train_data.pkl", train=True)
         data_scaler(df=test_df_front, filename="test_front_data.pkl", train=False)
@@ -175,9 +199,8 @@ if __name__ == "__main__":
     )
     folder = os.getcwd()
 
-    # this will be the root folder where the data will be saved
-    # for inference this will be the artifact directory
-    # or copy the information from the artifact directory to this folder
 
     pipeline(folder, ticker, file_paths, inference=False)
     save_to_wandb(folder)
+
+
