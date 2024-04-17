@@ -10,7 +10,8 @@ data/
 .DS_Store
 artifacts/
 wandb/
-
+*.pkl
+*.pickle
 # Distribution / packaging
 .Python
 build/

@@ -1,15 +1,13 @@
 import os
-import glob
 import shutil
 import ujson
 import time
-from tqdm import tqdm
 import logging
 import gzip
 import json
 
 
-def clean_dir(dir_to_clean:str, ticker: str = None, wait_time: int = 0):
+def clean_dir(dir_to_clean: str, ticker: str = None, wait_time: int = 0):
     if "option_chain_data" in dir_to_clean:
         raise ValueError(">>>YOU ARE TRYING TO DELETE RAW DATA!!!")
     if ticker is not None:

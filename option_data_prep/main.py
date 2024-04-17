@@ -17,7 +17,7 @@ import wandb
 from dotenv import load_dotenv, find_dotenv
 
 # Custom libraries
-from src.option_data_prep.utils import clean_dir
+from option_data_prep.utils import clean_dir
 from option_data_prep.data.data_pipeline import data_inference, impute_peaks_rf
 
 
@@ -50,9 +50,9 @@ def save_to_wandb(folder):
 
     wandb.init(project="rlot-data-pipeline")
     artifact = wandb.Artifact("desc_stats_nounderlying", type="data")
-    artifact.add_dir(os.path.join(folder, "data", "train"),name="data")
+    artifact.add_dir(os.path.join(folder, "data", "train"), name="data")
     artifact.add_dir(os.path.join(folder, "model"), name="model")
-    artifact.add_dir(os.path.join(folder, "src"), name="src")
+    artifact.add_dir(os.path.join(folder, "option_data_prep"), name="option_data_prep")
     wandb.log_artifact(artifact)
     wandb.finish()
 
@@ -73,18 +73,22 @@ def check_column_order(df):
 def data_scaler(df: pd.DataFrame, filename: str, train: bool = True):
     df.sort_values(by=["humanTime"], inplace=True)
     df.reset_index(drop=True, inplace=True)
-    
+
     human_time = df.pop("humanTime").to_numpy()
     underlying_price = df.pop("underlyingPrice").to_numpy()
-    df = df.drop(columns=["tickerPrice", ])
+    df = df.drop(
+        columns=[
+            "tickerPrice",
+        ]
+    )
     # create a tuple of the column structure
     scaled_columns = tuple(df.columns)
-    
+
     if train:
         df = fit_scaler(df)
     else:
         df = transform_scaler(df)
-        
+
     # append the human time and underlying price
     df.insert(0, "humanTime", human_time)
     df.insert(0, "underlyingPrice", underlying_price)
@@ -103,10 +107,9 @@ def data_scaler(df: pd.DataFrame, filename: str, train: bool = True):
         pickle.dump(data, f)
     # save the column tuple structure to model folder
     model_folder = os.path.join(folder, "model", ticker)
-    # with open(os.path.join(model_folder, "columns.pkl"), "wb") as f:
-    #     pickle.dump(scaled_columns, f)
-    pickle.dump(scaled_columns, open(model_folder, "wb"), protocol=5)
-    
+    with open(os.path.join(model_folder, "columns.pkl"), "wb") as f:
+        pickle.dump(scaled_columns, f, protocol=5)
+    # pickle.dump(scaled_columns, open(model_folder, "wb"), protocol=5)
 
 
 def fit_scaler(df):
@@ -126,10 +129,11 @@ def transform_scaler(df):
     return df
 
 
-def split_data(df):
-    test_df_front = df.iloc[:500].copy()
-    test_df_back = df.iloc[-500:].copy()
-    train_df = df.iloc[500:-500].copy()
+def split_data(df, test_steps=500):
+    test_steps += 1
+    test_df_front = df.iloc[:test_steps].copy()
+    test_df_back = df.iloc[-test_steps:].copy()
+    train_df = df.iloc[test_steps:-test_steps].copy()
     return train_df, test_df_front, test_df_back
 
 
@@ -165,24 +169,30 @@ def pipeline(folder, ticker, file_paths, inference=False):
     df = pd.read_parquet(processed_files, engine="pyarrow")
     # drop duplicated timestamps
     # slice timestamps above 16h
-    df['hour'] = df['humanTime'].apply(lambda x: int(x.split(" ")[1].split(":")[0])) 
-    logging.info("Dropping %s duplicated timestamps, %s percentage of timestamps above 16h", len(df[df['hour']>16]), round(len(df[df['hour']>16])/len(df)*100,3))
-    df = df[df['hour']<=16]
-    df = df.drop(columns=['hour'])
-    
+    df["hour"] = df["humanTime"].apply(lambda x: int(x.split(" ")[1].split(":")[0]))
+    logging.info(
+        "Dropping %s duplicated timestamps, %s percentage of timestamps above 16h",
+        len(df[df["hour"] > 16]),
+        round(len(df[df["hour"] > 16]) / len(df) * 100, 3),
+    )
+    df = df[df["hour"] <= 16]
+    df = df.drop(columns=["hour"])
+
     time_stamps = df["humanTime"]
     logging.info(f"Number of unique timestamps: {len(time_stamps.unique())}")
-    logging.info(f"Number of duplicated timestamps: {len(time_stamps) - len(time_stamps.unique())}")    
+    logging.info(
+        f"Number of duplicated timestamps: {len(time_stamps) - len(time_stamps.unique())}"
+    )
     logging.info(f"Shape of the dataframe: {df.shape}")
-    
+
     train_dir = os.path.join(folder, "data", "train")
     clean_dir(dir_to_clean=train_dir, ticker=ticker, wait_time=wait_time)
-    model_dir = os.path.join(folder, "model")    
+    model_dir = os.path.join(folder, "model")
     if not inference:
         clean_dir(dir_to_clean=model_dir, ticker=ticker, wait_time=wait_time)
         # TODO: include the this in the inference
         df = impute_peaks_rf(df)
-        check_column_order(df)        
+        check_column_order(df)
         train_df, test_df_front, test_df_back = split_data(df)
         data_scaler(df=train_df, filename="train_data.pkl", train=True)
         data_scaler(df=test_df_front, filename="test_front_data.pkl", train=False)
@@ -199,8 +209,5 @@ if __name__ == "__main__":
     )
     folder = os.getcwd()
 
-
     pipeline(folder, ticker, file_paths, inference=False)
     save_to_wandb(folder)
-
-
